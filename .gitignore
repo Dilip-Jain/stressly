@@ -1,0 +1,56 @@
+# K6 Performance Testing Framework - .gitignore
+
+# Environment configuration (keep .example only)
+config.env
+!config.env.example
+
+# Test results and reports
+results*.json
+*.html
+test-results/
+reports/
+
+# K6 cache
+.k6/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Build output
+dist/
+build/
+
+# Dependencies
+.yarn/cache/
+.pnp.js
+
+# Local development
+local-results/
