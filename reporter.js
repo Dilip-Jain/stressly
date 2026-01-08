@@ -230,5 +230,3 @@ export class TestReporter {
     }
   }
 }
-
-export default TestReporter;

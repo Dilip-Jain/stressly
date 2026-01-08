@@ -12,7 +12,7 @@ import {
   verifyAuth,
   verifyHealth,
 } from './utils.js';
-import TestReporter from './reporter.js';
+import { TestReporter } from './reporter.js';
 
 // Determine which scenario to run
 const scenarioName = config.cli.scenarioName || 'load';
@@ -113,10 +113,8 @@ export function teardown(data) {
   reporter.printSummary();
 
   // Generate JSON report (in real scenario, this would be saved to file)
-  if (config.reporting.verbose) {
-    const report = reporter.generateJsonReport();
-    console.log('\n[Report JSON available for export]');
-  }
+  const report = reporter.generateJsonReport();
+  console.log('\n[Report JSON available for export]');
 }
 
 // Helper function to calculate total test duration

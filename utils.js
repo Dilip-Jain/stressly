@@ -268,15 +268,4 @@ export function formatPercentage(value) {
   return `${(value * 100).toFixed(2)}%`;
 }
 
-export default {
-  MetricsTracker,
-  getAuthHeaders,
-  makeRequest,
-  selectEndpoint,
-  selectUserProfile,
-  getThinkTime,
-  verifyAuth,
-  verifyHealth,
-  formatDuration,
-  formatPercentage,
-};
+// Exports are handled above as named exports
