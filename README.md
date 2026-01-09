@@ -6,9 +6,11 @@ A modular and configurable k6 testing framework for API performance testing incl
 
 ```
 API profiler/
-├── config.js       # Configuration file for endpoints, scenarios, and thresholds
+├── config.js       # Configuration file for scenarios, and thresholds
 ├── test.js         # Main generic test runner
 ├── utils.js        # Utility functions for requests, validation, and metrics
+├── reporter.js     # Test report generator class
+├── endpoints.js    # Configration file for endpoints
 └── README.md       # This file
 ```
 
