@@ -2,7 +2,6 @@
 
 import { sleep } from 'k6';
 import { config } from './config.js';
-import { endpoints } from './endpoints.js';
 import {
   MetricsTracker,
   makeRequest,
@@ -17,7 +16,6 @@ import { TestReporter } from './reporter.js';
 // Determine which scenario to run
 const scenarioName = config.cli.scenarioName || 'load';
 const scenario = config.scenarios[scenarioName];
-
 if (!scenario) {
   throw new Error(`Unknown scenario: ${scenarioName}. Available: ${Object.keys(config.scenarios).join(', ')}`);
 }
@@ -52,15 +50,19 @@ export function setup() {
   console.log(`  Total Duration: ${calculateTotalDuration(scenario.stages)}`);
 
   // Pre-test verification
-  console.log('\nRunning pre-test checks...');
-  try {
-    verifyHealth(config.api.baseUrl);
-    if (config.auth.type !== 'none') {
-      verifyAuth(config.api.baseUrl, config.auth);
+  if (config.verification.enabled) {
+    console.log('\nRunning pre-test checks...');
+    try {
+      if (config.verification.healthCheck.enabled) {
+        verifyHealth(config.api.baseUrl, config.verification.healthCheck);
+      }
+      if (config.verification.authenticator.enabled && config.auth.type !== 'none') {
+        verifyAuth(config.api.baseUrl, config.auth, config.verification.authenticator);
+      }
+    } catch (error) {
+      console.error(`✗ Pre-test check failed: ${error.message}`);
+      throw error;
     }
-  } catch (error) {
-    console.error(`✗ Pre-test check failed: ${error.message}`);
-    throw error;
   }
 
   console.log('\n✓ Setup complete, starting test...\n');
@@ -73,14 +75,14 @@ export function setup() {
 
 // Main test function
 export default function (data) {
-  const userProfile = selectUserProfile(config.userProfiles);
+  const userProfile = selectUserProfile(config.userProfiles.profiles);
   const requestsPerSession = 
     userProfile.requestsPerSession.min +
     Math.floor(Math.random() * (userProfile.requestsPerSession.max - userProfile.requestsPerSession.min));
 
   // Execute requests for this user session
   for (let i = 0; i < requestsPerSession; i++) {
-    const endpoint = selectEndpoint(endpoints);
+    const endpoint = selectEndpoint(config.endpoints);
     
     const result = makeRequest(
       endpoint,
