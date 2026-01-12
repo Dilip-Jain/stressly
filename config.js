@@ -67,6 +67,11 @@ export const config = {
         { duration: '30s', target: 0 },
       ],
       thinkTime: { min: 1, max: 3 },
+      retry: {
+        maxRetries: 3,
+        backoffMs: 200,
+        description: 'Thorough validation - multiple retries'
+      },
     },
     load: {
       name: 'Load Test',
@@ -79,6 +84,11 @@ export const config = {
         { duration: '2m', target: 0 },
       ],
       thinkTime: { min: 1, max: 5 },
+      retry: {
+        maxRetries: 2,
+        backoffMs: 100,
+        description: 'Balanced approach'
+      },
     },
     stress: {
       name: 'Stress Test',
@@ -93,6 +103,11 @@ export const config = {
         { duration: '2m', target: 0 },
       ],
       thinkTime: { min: 0.5, max: 2 },
+      retry: {
+        maxRetries: 1,
+        backoffMs: 50,
+        description: 'Aggressive - minimal retries'
+      },
     },
     spike: {
       name: 'Spike Test',
@@ -107,6 +122,11 @@ export const config = {
         { duration: '1m', target: 0 },
       ],
       thinkTime: { min: 0.5, max: 2 },
+      retry: {
+        maxRetries: 0,
+        backoffMs: 0,
+        description: 'Fail-fast - no retries'
+      },
     },
     soak: {
       name: 'Soak Test',
@@ -117,6 +137,11 @@ export const config = {
         { duration: '5m', target: 0 },
       ],
       thinkTime: { min: 2, max: 8 },
+      retry: {
+        maxRetries: 2,
+        backoffMs: 150,
+        description: 'Balanced for long-running tests'
+      },
     },
   },
 
@@ -182,6 +207,22 @@ export const config = {
   tags: {
     testType: 'stressly',
     environment: 'staging',
+  },
+
+  // Circuit breaker configuration
+  // Stops test when error rate exceeds threshold to prevent cascading failures
+  circuitBreaker: {
+    enabled: true,
+    threshold: 0.5,        // 50% error rate triggers circuit break
+    minSampleSize: 10,     // Require at least 10 requests before triggering
+    resetAfterMs: 5000,    // Reset after 5 seconds of being open
+  },
+
+  // Request tracking configuration
+  requestTracking: {
+    enabled: true,
+    trackSequenceNumbers: true,
+    trackSessionStats: true,
   },
 };
 
