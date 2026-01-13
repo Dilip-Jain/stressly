@@ -59,6 +59,7 @@ export const config = {
   // Test scenarios with different VU ramps
   scenarios: {
     smoke: {
+      executor: 'ramping-vus',
       name: 'Smoke Test',
       description: 'Quick sanity check with minimal load',
       stages: [
@@ -74,6 +75,7 @@ export const config = {
       },
     },
     load: {
+      executor: 'ramping-vus',
       name: 'Load Test',
       description: 'Normal to moderately high load',
       stages: [
@@ -91,6 +93,7 @@ export const config = {
       },
     },
     stress: {
+      executor: 'ramping-vus',
       name: 'Stress Test',
       description: 'Push system to its limits',
       stages: [
@@ -110,6 +113,7 @@ export const config = {
       },
     },
     spike: {
+      executor: 'ramping-vus',
       name: 'Spike Test',
       description: 'Sudden traffic spike',
       stages: [
@@ -129,6 +133,7 @@ export const config = {
       },
     },
     soak: {
+      executor: 'ramping-vus',
       name: 'Soak Test',
       description: 'Extended load to detect leaks',
       stages: [
