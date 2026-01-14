@@ -34,7 +34,7 @@ export const config = {
     
     // Authentication verification
     authenticator: {
-      enabled: true,  // Test authentication
+      enabled: false,  // Test authentication
       endpoint: '/api/login',  // Auth endpoint (e.g., /api/token, /api/user/me, etc.)
       method: 'POST',  // HTTP method for auth test
       expectedStatus: 200,

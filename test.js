@@ -4,11 +4,11 @@
  * This is a generic test runner that uses configuration from config.js
  * 
  * Usage:
- *   Load Test:   k6 run -e TEST_TYPE=load test.js
- *   Stress Test: k6 run -e TEST_TYPE=stress test.js
- *   Spike Test:  k6 run -e TEST_TYPE=spike test.js
- *   Smoke Test:  k6 run -e TEST_TYPE=smoke test.js
- *   Soak Test:   k6 run -e TEST_TYPE=soak test.js
+ *   Load Test:   k6 run -e SCENARIO=load test.js
+ *   Stress Test: k6 run -e SCENARIO=stress test.js
+ *   Spike Test:  k6 run -e SCENARIO=spike test.js
+ *   Smoke Test:  k6 run -e SCENARIO=smoke test.js
+ *   Soak Test:   k6 run -e SCENARIO=soak test.js
  */
 
 import { sleep } from 'k6';
@@ -32,11 +32,13 @@ import {
 import { Trend, Rate, Counter } from 'k6/metrics';
 import { handleSummary } from './reporter.js';
 
-// Get test type from environment variable (default to 'load')
-const testType = __ENV.TEST_TYPE || 'load';
+// Get test type from environment variable (default to 'load') and validate test type in config
+const test = __ENV.SCENARIO || 'load';
+if (!config.scenarios[test]) {
+  throw new Error(`Invalid SCENARIO: ${test}. Available types: ${Object.keys(config.scenarios).join(', ')}`);
+}
+const scenario = config.scenarios[test];
 
-// Get scenario config
-const scenario = config.scenarios[testType];
 
 // Circuit breaker state tracking
 const circuitBreaker = {
@@ -54,31 +56,26 @@ let requestSequence = 0;
 let sessionErrors = 0;
 let sessionSuccesses = 0;
 
-// Filter active endpoints (weight > 0) - creates object, not array
+// Filter active endpoints (weight > 0)
 const activeEndpoints = filterInactiveEndpoints(config.endpoints);
 
 // Initialize endpoint-specific metrics in init context
 // Only create metrics for endpoints with weight > 0
-Object.keys(activeEndpoints).forEach(endpointName => {
-    const metricName = `${endpointName}_response_time`;
-    endpointMetrics[endpointName] = new Trend(metricName);
-    endpointErrors[endpointName] = new Rate(`${endpointName}_errors`);
-    endpointSuccess[endpointName] = new Rate(`${endpointName}_success`);
-    endpointTimeouts[endpointName] = new Rate(`${endpointName}_timeouts`);
+activeEndpoints.forEach(endpoint => {
+    const metricName = `ep_${endpoint.name.toLowerCase().replace(/\s+/g, '_')}_response_time`;
+    endpointMetrics[endpoint.name] = new Trend(metricName);
+    endpointErrors[endpoint.name] = new Rate(`${metricName.replace('_response_time', '_errors')}`);
+    endpointSuccess[endpoint.name] = new Rate(`${metricName.replace('_response_time', '_success')}`);
+    endpointTimeouts[endpoint.name] = new Rate(`${metricName.replace('_response_time', '_timeouts')}`);
     
     // Initialize status code counters for each category
-    endpointStatusCodes[endpointName] = {
-        status_2xx: new Counter(`${endpointName}_status_2xx`),
-        status_3xx: new Counter(`${endpointName}_status_3xx`),
-        status_4xx: new Counter(`${endpointName}_status_4xx`),
-        status_5xx: new Counter(`${endpointName}_status_5xx`),
+    endpointStatusCodes[endpoint.name] = {
+        status_2xx: new Counter(`${metricName.replace('_response_time', '_status_2xx')}`),
+        status_3xx: new Counter(`${metricName.replace('_response_time', '_status_3xx')}`),
+        status_4xx: new Counter(`${metricName.replace('_response_time', '_status_4xx')}`),
+        status_5xx: new Counter(`${metricName.replace('_response_time', '_status_5xx')}`),
     };
 });
-
-// Validate test type exists in config
-if (!config.scenarios[testType]) {
-  throw new Error(`Invalid TEST_TYPE: ${testType}. Available types: ${Object.keys(config.scenarios).join(', ')}`);
-}
 
 // Validation function - comprehensive config check
 function validateConfiguration() {
@@ -87,7 +84,7 @@ function validateConfiguration() {
   // Validate base config
   if (!config.api?.baseUrl) errors.push('config.api.baseUrl is missing');
   if (!config.endpoints || Object.keys(config.endpoints).length === 0) errors.push('config.endpoints is empty');
-  if (!config.scenarios[testType]) errors.push(`Scenario "${testType}" not found in config.scenarios`);
+  if (!config.scenarios[test]) errors.push(`Scenario "${test}" not found in config.scenarios`);
   
   // Validate endpoints
   let hasActiveEndpoint = false;
@@ -169,10 +166,25 @@ function executeWithRetry(executeFunc, endpointName, retryCount = 0) {
   }
 }
 
+// Transform scenario config to remove non-K6 fields (description, thinkTime, retry, name)
+// K6 only accepts: executor, stages, gracefulStop, and other k6-specific properties
+function getK6ScenarioConfig(scenarioConfig) {
+  const k6ValidFields = ['executor', 'stages', 'gracefulStop', 'startTime', 'env', 'exec'];
+  const k6Config = {};
+  
+  for (const field of k6ValidFields) {
+    if (field in scenarioConfig) {
+      k6Config[field] = scenarioConfig[field];
+    }
+  }
+  
+  return k6Config;
+}
+
 // Export options for k6
 export const options = {
   scenarios: {
-    [testType]: config.scenarios[testType],
+    [test]: getK6ScenarioConfig(config.scenarios[test]),
   },
   thresholds: config.thresholds,
   noConnectionReuse: config.options?.noConnectionReuse || false,
@@ -194,11 +206,10 @@ function execute(userProfile, endpointName, endpointConfig) {
   // Add test tags with request context
   const tags = {
     ...config.tags,
-    testType: testType,
+    test: test,
     endpointName: endpointName,
     userProfile: userProfile ? userProfile.name : 'default',
     requestSeq: requestSequence.toString(),
-    scenarioType: testType,
   };
 
   let isSuccess = false;
@@ -208,11 +219,11 @@ function execute(userProfile, endpointName, endpointConfig) {
     const result = executeWithRetry(
       () => executeEndpoint(
         endpointConfig,
-        config.baseUrl,
+        config.api.baseUrl,
         config.auth,
         tags,
         endpointName,
-        config.globalHeaders,
+        config.api.globalHeaders,
         config.options
       ),
       endpointName
@@ -273,7 +284,7 @@ export function setup() {
 
   // STEP 2: Show test configuration
   console.log(`========================================`);
-  console.log(`🚀 Starting K6 ${testType.toUpperCase()} Test`);
+  console.log(`🚀 Starting K6 ${test.toUpperCase()} Test`);
   console.log(`📍 Base URL: ${config.api.baseUrl}`);
   console.log(`🎯 Active Endpoints: ${Object.keys(activeEndpoints).length}`);
   console.log(`🔐 Auth: ${config.auth?.enabled ? config.auth.type : 'disabled'}`);
@@ -303,18 +314,38 @@ export function setup() {
     console.log('\n🔍 Running pre-test verification...\n');
     
     // Verify authentication
-    const authResult = verifyAuthentication(
-      config.api.baseUrl, 
-      config.auth, 
-      config.verification,
-      config.api.globalHeaders
-    );
+    let authResult = { success: false, skipped: false, message: '' };
+    if (config.verification.authenticator?.enabled !== false) {
+      try {
+        authResult = verifyAuthentication(
+          config.api.baseUrl, 
+          config.auth, 
+          config.verification
+        );
+      } catch (error) {
+        authResult = { success: false, skipped: false, message: error.message };
+      }
+    } else {
+      authResult = { success: true, skipped: true, message: 'Authentication verification disabled' };
+    }
     
     // Verify server health
-    const healthResult = verifyServerHealth(
-      config.api.baseUrl, 
-      config.verification
-    );
+    let healthResult = { success: false, warning: false, message: '' };
+    if (config.verification.healthCheck?.enabled === true) {
+      try {
+        healthResult = verifyServerHealth(
+          config.api.baseUrl, 
+          config.verification
+        );
+        if (!healthResult.success && !healthResult.skipped) {
+          healthResult.warning = true;
+        }
+      } catch (error) {
+        healthResult = { success: false, warning: true, message: error.message };
+      }
+    } else {
+      healthResult = { success: true, skipped: true, message: 'Health check verification disabled' };
+    }
     
     console.log('');
     
@@ -322,9 +353,6 @@ export function setup() {
     if (!authResult.success && !authResult.skipped) {
       console.error('❌ CRITICAL ERROR: Authentication verification failed');
       console.error(`   ${authResult.message}`);
-      if (authResult.suggestion) {
-        console.error(`   💡 Suggestion: ${authResult.suggestion}`);
-      }
       console.error('\n   Cannot proceed with test - authentication is required for API access');
       console.error('   Please check your credentials in config.env or config.js\n');
       console.error(`========================================`);
@@ -332,12 +360,12 @@ export function setup() {
     }
     
     // Warnings don't stop the test, but we log them
-    if (healthResult.warning) {
-      console.warn('⚠️  WARNING: Health check had warnings (test will continue)');
+    if (healthResult.warning && !healthResult.skipped) {
+      console.warn('⚠️  WARNING: Health check had issues (test will continue)');
       console.warn(`    ${healthResult.message}\n`);
     }
     
-    if (authResult.success && !authResult.skipped && healthResult.success) {
+    if ((authResult.success || authResult.skipped) && (healthResult.success || healthResult.skipped)) {
       console.log('✅ All pre-test verifications passed\n');
     }
     
@@ -349,7 +377,7 @@ export function setup() {
   console.log(`========================================\n`);
 
   return {
-    testType: testType,
+    test: test,
     startTime: new Date().toISOString(),
   };
 }
@@ -362,7 +390,7 @@ export default function (data) {
   if (__ENV.ENDPOINT) {
     // Test single specific endpoint
     const endpointName = __ENV.ENDPOINT;
-    const endpointConfig = activeEndpoints[endpointName];
+    const endpointConfig = activeEndpoints.find(ep => ep.name === endpointName);
     
     if (!endpointConfig) {
       throw new Error(`Endpoint '${endpointName}' not found in endpoints.js or has weight=0`);
@@ -415,7 +443,7 @@ export default function (data) {
  */
 export function teardown(data) {
   console.log(`========================================`);
-  console.log(`✅ Test Completed: ${testType.toUpperCase()}`);
+  console.log(`✅ Test Completed: ${test.toUpperCase()}`);
   console.log(`Start Time: ${data.startTime}`);
   console.log(`End Time: ${new Date().toISOString()}`);
   

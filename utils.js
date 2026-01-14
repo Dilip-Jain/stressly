@@ -230,31 +230,145 @@ export function getThinkTime(profile) {
 }
 
 // Verify authentication before test starts
-export function verifyAuth(baseUrl, authConfig) {
+export function verifyAuth(baseUrl, authConfig, verificationConfig = {}) {
   console.log('Verifying authentication...');
   const headers = getAuthHeaders(authConfig);
   
-  const response = http.get(`${baseUrl}/api/health`, { headers });
+  // Use verification config for endpoint details, or fall back to defaults
+  const authEndpoint = verificationConfig?.authenticator?.endpoint || '/api/login';
+  const authMethod = verificationConfig?.authenticator?.method || 'POST';
+  const expectedStatus = verificationConfig?.authenticator?.expectedStatus || 200;
   
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(`Authentication failed: HTTP ${response.status}`);
+  const url = `${baseUrl}${authEndpoint}`;
+  let response;
+  
+  try {
+    if (authMethod === 'POST') {
+      response = http.post(url, {}, { headers });
+    } else {
+      response = http.get(url, { headers });
+    }
+  } catch (error) {
+    throw new Error(`Authentication verification failed: ${error.message}`);
+  }
+  
+  if (response.status !== expectedStatus) {
+    throw new Error(`Authentication failed: HTTP ${response.status} (expected ${expectedStatus})`);
   }
 
   console.log('✓ Authentication verified');
-  return true;
+  return { success: true, skipped: false };
 }
 
 // Verify server health before test starts
-export function verifyHealth(baseUrl) {
+export function verifyHealth(baseUrl, verificationConfig = {}) {
   console.log('Verifying server health...');
-  const response = http.get(`${baseUrl}/api/health`);
+  
+  // Use verification config for health check details, or fall back to defaults
+  if (verificationConfig?.healthCheck?.enabled === false) {
+    console.log('ℹ️  Health check disabled in verification config');
+    return { success: true, skipped: true };
+  }
+  
+  const healthEndpoint = verificationConfig?.healthCheck?.endpoint || '/api/health';
+  const healthMethod = verificationConfig?.healthCheck?.method || 'GET';
+  const expectedStatus = verificationConfig?.healthCheck?.expectedStatus || 200;
+  
+  const url = `${baseUrl}${healthEndpoint}`;
+  let response;
+  
+  try {
+    if (healthMethod === 'POST') {
+      response = http.post(url, {}, {});
+    } else {
+      response = http.get(url);
+    }
+  } catch (error) {
+    throw new Error(`Health check failed: ${error.message}`);
+  }
 
-  if (response.status !== 200) {
-    throw new Error(`Server health check failed: HTTP ${response.status}`);
+  if (response.status !== expectedStatus) {
+    throw new Error(`Server health check failed: HTTP ${response.status} (expected ${expectedStatus})`);
   }
 
   console.log('✓ Server is healthy');
-  return true;
+  return { success: true, skipped: false };
+}
+
+// Execute an endpoint request
+export function executeEndpoint(endpoint, baseUrl, authConfig, metricsTracker) {
+  const startTime = Date.now();
+  const response = makeRequest(endpoint, baseUrl, authConfig);
+  const duration = Date.now() - startTime;
+  
+  if (metricsTracker) {
+    metricsTracker.recordRequest(endpoint, response, duration);
+  }
+  
+  return response;
+}
+
+// Validate response status and content
+export function validateResponse(response, expectedStatus = 200) {
+  return response.status === expectedStatus;
+}
+
+// Random sleep between min and max milliseconds
+export function randomSleep(min = 0, max = 1000) {
+  const duration = Math.random() * (max - min) + min;
+  sleep(duration / 1000);
+}
+
+// Select a weighted endpoint based on weight distribution
+export function selectWeightedEndpoint(endpoints) {
+  const totalWeight = endpoints.reduce((sum, ep) => sum + (ep.weight || 1), 0);
+  let random = Math.random() * totalWeight;
+  
+  for (const endpoint of endpoints) {
+    random -= (endpoint.weight || 1);
+    if (random <= 0) return endpoint;
+  }
+  
+  return endpoints[endpoints.length - 1];
+}
+
+// Parse JSON response body
+export function parseJsonResponse(response) {
+  try {
+    return JSON.parse(response.body);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Verify authentication is working
+export function verifyAuthentication(baseUrl, authConfig, verificationConfig) {
+  return verifyAuth(baseUrl, authConfig, verificationConfig);
+}
+
+// Verify server health
+export function verifyServerHealth(baseUrl, verificationConfig) {
+  return verifyHealth(baseUrl, verificationConfig);
+}
+
+// Metrics tracking - create metrics tracker
+export const endpointMetrics = new MetricsTracker();
+
+// Error tracking per endpoint
+export const endpointErrors = {};
+
+// Success tracking per endpoint
+export const endpointSuccess = {};
+
+// Timeout tracking per endpoint
+export const endpointTimeouts = {};
+
+// Status code tracking per endpoint
+export const endpointStatusCodes = {};
+
+// Filter out inactive endpoints
+export function filterInactiveEndpoints(endpoints) {
+  return endpoints.filter(ep => ep.active !== false);
 }
 
 // Format duration in human-readable format
