@@ -413,10 +413,7 @@ export class TestReporter {
     if (format === 'json') {
       const report = this.generateJsonReport();
       const jsonContent = JSON.stringify(report, null, 2);
-      // Note: k6 doesn't have native file write capabilities
-      // This is a placeholder for integration with external tools
-      console.log(`Report would be saved to: ${filePath}`);
-      return report;
+      return jsonContent;
     }
   }
 
@@ -505,11 +502,20 @@ export class TestReporter {
  */
 export function handleSummary(data) {
   try {
-    // For now, just output a message about handleSummary being available
-    // This would typically integrate with external systems or log files
-    console.log('\n✅ Test reporter initialized with handleSummary support');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + new Date().toISOString().split('T')[1].replace(/[:.]/g, '-').slice(0, -5);
+    const fileName = `results/test-report-${timestamp}.json`;
+    
+    // Generate the report JSON
+    const report = {
+      testInfo: {
+        timestamp: new Date().toISOString(),
+      },
+      summary: data.metrics,
+    };
+    
     return {
-      'stdout': '\n✅ Test completed - handleSummary function available for k6 integration\n',
+      [fileName]: JSON.stringify(report, null, 2),
+      'stdout': `\n✅ Test completed - Results saved to ${fileName}\n`,
     };
   } catch (error) {
     console.error('Error in handleSummary:', error.message);
