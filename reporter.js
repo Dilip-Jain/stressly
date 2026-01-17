@@ -497,6 +497,147 @@ export class TestReporter {
 }
 
 /**
+ * Extract per-endpoint metrics from K6 metrics data
+ */
+function extractEndpointMetrics(data) {
+  const endpointMetrics = {};
+  const metricsData = data.metrics || {};
+
+  // Process all metrics and group by endpoint
+  for (const [metricName, metricObj] of Object.entries(metricsData)) {
+    // Parse metric names like: ep_endpoint_name_response_time, ep_endpoint_name_errors, etc.
+    const epMatch = metricName.match(/^ep_(.+?)_(response_time|errors|success|timeouts|status_\d{3})$/);
+    
+    if (epMatch) {
+      const endpointNameNormalized = epMatch[1].replace(/_/g, ' ');
+      const metricType = epMatch[2];
+      
+      // Initialize endpoint entry if not exists
+      if (!endpointMetrics[endpointNameNormalized]) {
+        endpointMetrics[endpointNameNormalized] = {
+          name: endpointNameNormalized,
+          requests: 0,
+          success: 0,
+          errors: 0,
+          timeouts: 0,
+          responseTimes: [],
+          statusCodes: {},
+          errorRate: '0%',
+          successRate: '0%',
+          avgResponseTime: 0,
+          minResponseTime: 0,
+          maxResponseTime: 0,
+          p95ResponseTime: 0,
+          p99ResponseTime: 0,
+        };
+      }
+
+      const metric = endpointMetrics[endpointNameNormalized];
+
+      // Extract data based on metric type
+      if (metricType === 'response_time' && metricObj.values) {
+        const values = Object.values(metricObj.values || {});
+        metric.responseTimes = values;
+        metric.requests = values.length;
+        if (values.length > 0) {
+          metric.avgResponseTime = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+          metric.minResponseTime = Math.round(Math.min(...values));
+          metric.maxResponseTime = Math.round(Math.max(...values));
+          
+          // Calculate percentiles
+          const sorted = values.sort((a, b) => a - b);
+          const p95Index = Math.floor(sorted.length * 0.95);
+          const p99Index = Math.floor(sorted.length * 0.99);
+          metric.p95ResponseTime = Math.round(sorted[p95Index] || 0);
+          metric.p99ResponseTime = Math.round(sorted[p99Index] || 0);
+        }
+      } else if (metricType === 'errors' && metricObj.value !== undefined) {
+        metric.errors = Math.round(metricObj.value || 0);
+      } else if (metricType === 'success' && metricObj.value !== undefined) {
+        metric.success = Math.round(metricObj.value || 0);
+      } else if (metricType === 'timeouts' && metricObj.value !== undefined) {
+        metric.timeouts = Math.round(metricObj.value || 0);
+      }
+    }
+
+    // Extract status codes (e.g., ep_endpoint_name_status_200)
+    const statusMatch = metricName.match(/^ep_(.+?)_status_(\d{3})$/);
+    if (statusMatch) {
+      const endpointNameNormalized = statusMatch[1].replace(/_/g, ' ');
+      const statusCode = statusMatch[2];
+      
+      if (!endpointMetrics[endpointNameNormalized]) {
+        endpointMetrics[endpointNameNormalized] = {
+          name: endpointNameNormalized,
+          requests: 0,
+          success: 0,
+          errors: 0,
+          timeouts: 0,
+          responseTimes: [],
+          statusCodes: {},
+          errorRate: '0%',
+          successRate: '0%',
+          avgResponseTime: 0,
+          minResponseTime: 0,
+          maxResponseTime: 0,
+          p95ResponseTime: 0,
+          p99ResponseTime: 0,
+        };
+      }
+
+      const metric = endpointMetrics[endpointNameNormalized];
+      metric.statusCodes[statusCode] = Math.round(metricObj.value || 0);
+    }
+  }
+
+  // Calculate derived metrics
+  for (const [, metric] of Object.entries(endpointMetrics)) {
+    if (metric.requests > 0) {
+      metric.successRate = ((metric.success / metric.requests) * 100).toFixed(2) + '%';
+      metric.errorRate = ((metric.errors / metric.requests) * 100).toFixed(2) + '%';
+    }
+  }
+
+  return endpointMetrics;
+}
+
+/**
+ * Format per-endpoint metrics as a table for console output
+ */
+function formatEndpointTable(endpointMetrics) {
+  const header = [
+    '┌─ ENDPOINT',
+    '─ REQUESTS',
+    '─ SUCCESS',
+    '─ ERRORS',
+    '─ TIMEOUTS',
+    '─ AVG (ms)',
+    '─ P95 (ms)',
+    '─ P99 (ms)',
+    '─ SUCCESS %',
+  ].join('');
+  
+  let output = '\n' + header + ' ─┐\n';
+  
+  for (const [, metric] of Object.entries(endpointMetrics)) {
+    const endpoint = padString(metric.name.substring(0, 25), 28);
+    const requests = padString(String(metric.requests), 10, 'right');
+    const success = padString(String(metric.success), 10, 'right');
+    const errors = padString(String(metric.errors), 10, 'right');
+    const timeouts = padString(String(metric.timeouts), 10, 'right');
+    const avg = padString(formatNumber(metric.avgResponseTime), 10, 'right');
+    const p95 = padString(formatNumber(metric.p95ResponseTime), 10, 'right');
+    const p99 = padString(formatNumber(metric.p99ResponseTime), 10, 'right');
+    const successRate = padString(metric.successRate, 11, 'right');
+    
+    output += `│ ${endpoint}│${requests}│${success}│${errors}│${timeouts}│${avg}│${p95}│${p99}│${successRate}│\n`;
+  }
+  
+  output += '└────────────────────────────┴──────────┴─────────┴────────┴──────────┴──────────┴──────────┴──────────┴──────────────┘\n';
+  return output;
+}
+
+/**
  * Main handleSummary function - k6 entry point for test results
  * This function is automatically called by k6 after test completion
  */
@@ -505,14 +646,67 @@ export function handleSummary(data) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + new Date().toISOString().split('T')[1].replace(/[:.]/g, '-').slice(0, -5);
     const fileName = `results/test-report-${timestamp}.json`;
     
-    // Generate the report JSON
+    // Extract per-endpoint metrics
+    const endpointMetrics = extractEndpointMetrics(data);
+    
+    // Calculate aggregate totals
+    let totalRequests = 0;
+    let totalSuccess = 0;
+    let totalErrors = 0;
+    let totalTimeouts = 0;
+    let totalResponseTime = 0;
+    const allResponseTimes = [];
+    const statusCodeTotals = {};
+
+    for (const metric of Object.values(endpointMetrics)) {
+      totalRequests += metric.requests;
+      totalSuccess += metric.success;
+      totalErrors += metric.errors;
+      totalTimeouts += metric.timeouts;
+      totalResponseTime += metric.avgResponseTime * metric.requests;
+      allResponseTimes.push(...metric.responseTimes);
+      
+      // Aggregate status codes
+      for (const [code, count] of Object.entries(metric.statusCodes)) {
+        statusCodeTotals[code] = (statusCodeTotals[code] || 0) + count;
+      }
+    }
+
+    // Calculate aggregate percentiles
+    let p95Aggregate = 0;
+    let p99Aggregate = 0;
+    if (allResponseTimes.length > 0) {
+      const sorted = allResponseTimes.sort((a, b) => a - b);
+      const p95Index = Math.floor(sorted.length * 0.95);
+      const p99Index = Math.floor(sorted.length * 0.99);
+      p95Aggregate = Math.round(sorted[p95Index] || 0);
+      p99Aggregate = Math.round(sorted[p99Index] || 0);
+    }
+
+    const aggregateMetrics = {
+      totalRequests,
+      totalSuccess,
+      totalErrors,
+      totalTimeouts,
+      successRate: totalRequests > 0 ? ((totalSuccess / totalRequests) * 100).toFixed(2) + '%' : '0%',
+      errorRate: totalRequests > 0 ? ((totalErrors / totalRequests) * 100).toFixed(2) + '%' : '0%',
+      avgResponseTime: totalRequests > 0 ? Math.round(totalResponseTime / totalRequests) : 0,
+      p95ResponseTime: p95Aggregate,
+      p99ResponseTime: p99Aggregate,
+      statusCodes: statusCodeTotals,
+    };
+
+    // Generate the comprehensive report JSON
     const report = {
       testInfo: {
         timestamp: new Date().toISOString(),
+        executedAt: new Date().toLocaleString(),
       },
-      summary: data.metrics,
+      aggregateMetrics,
+      perEndpointMetrics: endpointMetrics,
+      rawMetrics: data.metrics,
     };
-    
+
     return {
       [fileName]: JSON.stringify(report, null, 2),
       'stdout': `\n✅ Test completed - Results saved to ${fileName}\n`,
