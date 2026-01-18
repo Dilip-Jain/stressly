@@ -707,9 +707,41 @@ export function handleSummary(data) {
       rawMetrics: data.metrics,
     };
 
+    // Format console output
+    let consoleOutput = '\n╔════════════════════════════════════════════════════════════════════════════════╗\n';
+    consoleOutput += '║                    K6 TEST RESULTS - PER ENDPOINT REPORT                        ║\n';
+    consoleOutput += '╚════════════════════════════════════════════════════════════════════════════════╝\n';
+    
+    // Aggregate summary
+    consoleOutput += '\n📊 AGGREGATE SUMMARY\n';
+    consoleOutput += '─'.repeat(80) + '\n';
+    consoleOutput += `Total Requests:      ${formatNumber(totalRequests)}\n`;
+    consoleOutput += `Successful:          ${formatNumber(totalSuccess)}\n`;
+    consoleOutput += `Failed:              ${formatNumber(totalErrors)}\n`;
+    consoleOutput += `Timeouts:            ${formatNumber(totalTimeouts)}\n`;
+    consoleOutput += `Success Rate:        ${aggregateMetrics.successRate}\n`;
+    consoleOutput += `Error Rate:          ${aggregateMetrics.errorRate}\n`;
+    consoleOutput += `Avg Response Time:   ${formatNumber(aggregateMetrics.avgResponseTime)}ms\n`;
+    consoleOutput += `P95 Response Time:   ${formatNumber(aggregateMetrics.p95ResponseTime)}ms\n`;
+    consoleOutput += `P99 Response Time:   ${formatNumber(aggregateMetrics.p99ResponseTime)}ms\n`;
+    
+    // Status codes
+    consoleOutput += '\n📈 HTTP STATUS CODES\n';
+    consoleOutput += '─'.repeat(80) + '\n';
+    for (const [code, count] of Object.entries(statusCodeTotals).sort()) {
+      const pct = ((count / totalRequests) * 100).toFixed(2);
+      consoleOutput += `  ${code}: ${count} (${pct}%)\n`;
+    }
+    
+    // Per-endpoint metrics table
+    consoleOutput += '\n🎯 PER-ENDPOINT PERFORMANCE';
+    consoleOutput += formatEndpointTable(endpointMetrics);
+    
+    consoleOutput += '✅ Test completed - Results saved to ' + fileName + '\n\n';
+
     return {
       [fileName]: JSON.stringify(report, null, 2),
-      'stdout': `\n✅ Test completed - Results saved to ${fileName}\n`,
+      'stdout': consoleOutput,
     };
   } catch (error) {
     console.error('Error in handleSummary:', error.message);
