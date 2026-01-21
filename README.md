@@ -176,10 +176,33 @@ Edit `endpoints.js`:
 }
 ```
 
-**Weight Calculation**: Endpoints are selected randomly based on weight distribution.
-- Total weight in example config: ~110
-- "List Users" weight 25: ~23% selection rate
-- "Health Check" weight 2: ~2% selection rate
+**Weight calculation**:
+- Total weight = sum of all endpoint weights
+- Selection = endpoint.weight / totalWeight
+- Example: weight 20 out of total 100 = 20% selection rate
+
+## Understanding Results
+
+```
+✓ Good Performance:
+  - Success Rate > 95%
+  - Avg Duration < 200ms
+  - p(95) < 1000ms
+  - No timeouts
+
+⚠ Acceptable:
+  - Success Rate 90-95%
+  - Avg Duration 200-500ms
+  - p(95) 1000-2000ms
+  - Few timeouts
+
+✗ Poor Performance:
+  - Success Rate < 90%
+  - Avg Duration > 500ms
+  - p(95) > 2000ms
+  - Regular timeouts
+```
+
 
 ### Customize User Profiles
 
