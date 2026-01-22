@@ -5,15 +5,25 @@ A comprehensive, production-ready API performance testing framework using k6 wit
 ## 🎯 Features
 
 ✅ **Multiple Test Types** - Smoke, Load, Stress, Spike, and Soak tests with pre-configured scenarios
+
 ✅ **Configurable Endpoints** - Define endpoints with path parameters, methods, weights, and timeouts
+
 ✅ **Weighted Endpoint Selection** - Higher weight endpoints selected more frequently
+
 ✅ **User Profiles** - Simulate Normal, Power, and Heavy user behaviors
+
 ✅ **Authentication Support** - Bearer tokens, Basic auth, API keys
+
 ✅ **Pre-test Verification** - Health checks and auth validation before tests run
+
 ✅ **Per-Endpoint Metrics** - Detailed tracking of response times, success/error rates, timeouts
+
 ✅ **Comprehensive Error Logging** - Distinguish timeouts, auth failures, server errors
+
 ✅ **Performance Thresholds** - Built-in checks for response times and error rates
+
 ✅ **CLI Flexibility** - Override configuration via command line
+
 ✅ **Detailed Reporting** - Formatted test summaries with per-endpoint analysis
 
 ## 📁 Project Structure
@@ -80,6 +90,16 @@ k6 run -e SCENARIO=smoke test.js
 ```
 
 ## 📊 Test Scenarios
+
+
+| Name | Duration | Load | Purpose |
+|------|----------|------|---------|
+| smoke | ~2 min | 5 VUs | Quick check |
+| load | ~16 min | 200 VUs | Normal testing |
+| stress | ~22 min | 1000 VUs | Find limit |
+| spike | ~8 min | 1000 spike | Surge handling |
+| soak | ~37 min | 50 sustained | Long stability |
+
 
 ### Smoke Test
 ```bash
